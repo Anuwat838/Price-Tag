@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Price Tag Admin</title>
+<meta name="theme-color" content="#1428A0">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--brand:#1428A0;--bg:#F3F5FA;--card:#fff;--ink:#1B1F2A;--mute:#6B7280;--line:#E3E7EF;--ok:#0F8A4B;--okbg:#E6F6EE;--warn:#B26A00;--warnbg:#FFF6DB;--bad:#C0262D}
+  *{box-sizing:border-box} body{margin:0;font-family:Sarabun,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:var(--brand);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;flex:1}
+  nav button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer;margin-left:4px}
+  nav button.on{background:#fff;color:var(--brand)}
+  main{padding:20px;max-width:1200px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+  label{font-size:12px;color:var(--mute);display:block;margin-bottom:3px}
+  input,select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;width:100%}
+  .btn{border:0;border-radius:8px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}
+  .primary{background:var(--brand);color:#fff} .ghost{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+  .grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  .pend{display:grid;grid-template-columns:180px 1fr;gap:16px}
+  .pend img{width:180px;height:180px;object-fit:cover;border-radius:10px;background:#ddd;cursor:zoom-in}
+  @media (max-width:640px){.pend{grid-template-columns:1fr}.pend img{width:100%;height:220px}}
+  table{width:100%;border-collapse:collapse;font-size:14px} th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+  th{background:#F7F8FC;font-weight:600;position:sticky;top:0} .num{text-align:right}
+  .scroll{overflow:auto;max-height:65vh}
+  .badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px}
+  .b-ok{background:var(--okbg);color:var(--ok)} .b-warn{background:var(--warnbg);color:var(--warn)}
+  .muted{color:var(--mute);font-size:13px} .err{color:var(--bad);font-size:13px}
+  .hidden{display:none!important}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px}
+</style>
+</head>
+<body>
+<header><h1>📊 Price Tag — Admin</h1>
+  <nav id="nav" class="hidden"><button data-t="queue" class="on">คิวอนุมัติ <span id="qCount"></span></button><button data-t="prices">ราคา & Export</button><button data-t="master">Master</button><button id="btnOut">ออก</button></nav>
+</header>
+<main>
+  <section id="vLogin" class="card" style="max-width:380px;margin:40px auto">
+    <h3 style="margin-top:0">เข้าสู่ระบบ Admin</h3>
+    <label>Email</label><input id="em" type="email" autocomplete="username">
+    <div style="height:8px"></div>
+    <label>Password</label><input id="pw" type="password" autocomplete="current-password">
+    <div class="err" id="loginErr"></div>
+    <div style="height:12px"></div>
+    <button class="btn primary" id="btnIn" style="width:100%">เข้าสู่ระบบ</button>
+  </section>
+
+  <section id="queue" class="hidden"><div id="qList"></div></section>
+
+  <section id="prices" class="hidden">
+    <div class="card"><div class="grid">
+      <div><label>ตั้งแต่วันที่</label><input type="date" id="dFrom"></div>
+      <div><label>ถึงวันที่</label><input type="date" id="dTo"></div>
+      <div><label>ห้าง</label><select id="fAcc"><option value="">ทั้งหมด</option></select></div>
+      <div><label>หมวด</label><select id="fCat"><option value="">ทั้งหมด</option></select></div>
+      <div><label>ยี่ห้อ</label><input id="fBrand" placeholder="เช่น LG"></div>
+    </div>
+    <div class="actions"><button class="btn primary" id="btnLoad">แสดงข้อมูล</button><button class="btn ghost" id="btnCsv">Export CSV (Excel)</button><span class="muted" id="pInfo"></span></div></div>
+    <div class="card scroll"><table id="pTbl"></table></div>
+  </section>
+
+  <section id="master" class="hidden">
+    <div class="card"><div class="grid"><div><label>ค้นหารุ่น/ยี่ห้อ</label><input id="mSearch"></div><div><label>หมวด</label><select id="mCat"><option value="">ทั้งหมด</option></select></div></div></div>
+    <div class="card scroll"><table id="mTbl"></table></div>
+  </section>
+</main>
+
+<script>
+const C = window.APP_CONFIG;
+const sb = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (n) => n == null ? "" : Number(n).toLocaleString();
+let REF = { cats: [], segs: [], rules: [], approved: [] };
+let me = null;
+
+// ---------- Auth ----------
+$("btnIn").onclick = async () => {
+  $("loginErr").textContent = "";
+  const { error } = await sb.auth.signInWithPassword({ email: $("em").value.trim(), password: $("pw").value });
+  if (error) return ($("loginErr").textContent = "เข้าสู่ระบบไม่สำเร็จ: " + error.message);
+  start();
+};
+$("pw").onkeydown = (e) => { if (e.key === "Enter") $("btnIn").click(); };
+$("btnOut").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+async function start() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+  me = user;
+  const { data: adm } = await sb.from("admins").select("user_id").eq("user_id", user.id);
+  if (!adm?.length) { $("loginErr").textContent = "บัญชีนี้ยังไม่มีสิทธิ์ Admin (ต้องเพิ่มในตาราง admins)"; await sb.auth.signOut(); return; }
+  $("vLogin").classList.add("hidden"); $("nav").classList.remove("hidden");
+  await loadRef();
+  for (const c of REF.cats) { $("fCat").add(new Option(c.category, c.category)); $("mCat").add(new Option(c.category, c.category)); }
+  const { data: acc } = await sb.from("stores").select("account");
+  [...new Set((acc || []).map(a => a.account))].sort().forEach(a => $("fAcc").add(new Option(a, a)));
+  const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+  $("dTo").value = today; $("dFrom").value = new Date(Date.now() + 7 * 3600e3 - 6 * 864e5).toISOString().slice(0, 10);
+  tab("queue");
+}
+
+async function loadRef() {
+  const [c, s, r, m] = await Promise.all([
+    sb.from("categories").select("*").order("category"),
+    sb.from("segments").select("*"),
+    sb.from("cap_group_rules").select("*"),
+    sb.from("models").select("id,model,brand,category").eq("status", "approved").order("model"),
+  ]);
+  REF = { cats: c.data || [], segs: s.data || [], rules: r.data || [], approved: m.data || [] };
+}
+
+function capGroup(category, segment, val) {
+  const seg = REF.rules.find(r => r.category === category && r.segment && r.segment === segment);
+  if (seg) return seg.group_name;
+  if (val === "" || val == null || isNaN(val)) return "";
+  const r = REF.rules.filter(r => r.category === category && !r.segment).find(r => val >= +r.min_val && (r.max_val == null || val < +r.max_val));
+  return r ? r.group_name : "";
+}
+
+// ---------- Tabs ----------
+document.querySelectorAll("nav [data-t]").forEach(b => b.onclick = () => tab(b.dataset.t));
+function tab(t) {
+  document.querySelectorAll("nav [data-t]").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  for (const id of ["queue", "prices", "master"]) $(id).classList.toggle("hidden", id !== t);
+  if (t === "queue") loadQueue();
+  if (t === "prices") loadPrices();
+  if (t === "master") loadMaster();
+}
+
+// ---------- Queue ----------
+async function loadQueue() {
+  $("qList").innerHTML = `<div class="card muted">กำลังโหลด…</div>`;
+  const { data, error } = await sb.from("v_pending_models").select("*").order("price_count", { ascending: false });
+  if (error) return ($("qList").innerHTML = `<div class="card err">${esc(error.message)}</div>`);
+  $("qCount").textContent = data.length ? `(${data.length})` : "";
+  if (!data.length) return ($("qList").innerHTML = `<div class="card muted">✓ ไม่มีรุ่นรออนุมัติ</div>`);
+  const paths = data.map(d => d.sample_image).filter(Boolean);
+  const urls = {};
+  if (paths.length) {
+    const { data: signed } = await sb.storage.from("tags").createSignedUrls(paths, 3600);
+    (signed || []).forEach(s => { if (s.signedUrl) urls[s.path] = s.signedUrl; });
+  }
+  $("qList").innerHTML = data.map(m => {
+    const segOpts = REF.segs.filter(s => s.category === m.category).map(s => `<option ${s.segment === m.segment ? "selected" : ""}>${esc(s.segment)}</option>`).join("");
+    const merge = REF.approved.filter(a => a.category === m.category).map(a => `<option value="${a.id}">${esc(a.brand)} · ${esc(a.model)}</option>`).join("");
+    const img = urls[m.sample_image] || "";
+    return `<div class="card pend" data-id="${m.id}">
+      <div>${img ? `<img src="${img}" onclick="window.open(this.src)">` : `<div class="muted">ไม่มีรูป</div>`}
+        <div class="muted" style="margin-top:6px">ราคาล่าสุด ฿${fmt(m.sample_price)} · ${m.price_count} รายการ<br>ส่งโดย PC ${esc(m.created_by_pc || "-")}</div></div>
+      <div>
+        <div class="grid">
+          <div><label>ยี่ห้อ</label><input data-f="brand" value="${esc(m.brand)}"></div>
+          <div><label>หมวด</label><select data-f="category">${REF.cats.map(c => `<option ${c.category === m.category ? "selected" : ""}>${c.category}</option>`).join("")}</select></div>
+          <div><label>รุ่น</label><input data-f="model" value="${esc(m.model)}"></div>
+          <div><label>Segment</label><select data-f="segment"><option value="">— เลือก —</option>${segOpts}</select></div>
+          <div><label>ความจุ (${esc(m.capacity_unit)})</label><input data-f="capacity_val" type="number" value="${m.capacity_val ?? ""}"></div>
+          <div><label>Capacity Group (อัตโนมัติ)</label><input data-f="cg" disabled value="${esc(m.capacity_group || "")}"></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" data-a="approve">✓ อนุมัติเข้า Master</button>
+          <span style="flex:1"></span>
+          <div style="min-width:220px"><label>หรือ รวมกับรุ่นที่มีอยู่ (กรณีพิมพ์ผิด)</label><select data-f="merge"><option value="">—</option>${merge}</select></div>
+          <button class="btn ghost" data-a="merge">รวม</button>
+        </div>
+        <div class="err" data-f="err"></div>
+      </div></div>`;
+  }).join("");
+  document.querySelectorAll(".pend").forEach(bindPend);
+}
+
+function bindPend(card) {
+  const id = +card.dataset.id, f = (n) => card.querySelector(`[data-f="${n}"]`);
+  const recalc = () => { f("cg").value = capGroup(f("category").value, f("segment").value, f("capacity_val").value === "" ? null : +f("capacity_val").value); };
+  f("category").onchange = () => {
+    f("segment").innerHTML = `<option value="">— เลือก —</option>` + REF.segs.filter(s => s.category === f("category").value).map(s => `<option>${esc(s.segment)}</option>`).join("");
+    recalc();
+  };
+  f("segment").onchange = recalc; f("capacity_val").oninput = recalc;
+  card.querySelector('[data-a="approve"]').onclick = async () => {
+    f("err").textContent = "";
+    if (!f("segment").value) return (f("err").textContent = "กรุณาเลือก Segment");
+    if (!f("cg").value) return (f("err").textContent = "ยังคำนวณ Capacity Group ไม่ได้ — ตรวจความจุ");
+    const cap = f("capacity_val").value === "" ? null : +f("capacity_val").value;
+    const unit = REF.cats.find(c => c.category === f("category").value)?.unit || "";
+    const { error } = await sb.from("models").update({
+      brand: f("brand").value.trim(), category: f("category").value, model: f("model").value.trim().toUpperCase(),
+      segment: f("segment").value, capacity_val: cap, capacity_text: cap != null ? `${cap}${unit}` : null,
+      status: "approved", approved_at: new Date().toISOString(), approved_by: me.id,
+    }).eq("id", id);
+    if (error) return (f("err").textContent = error.code === "23505" ? "มีรุ่นนี้ใน Master แล้ว — ใช้ปุ่ม 'รวม' แทน" : error.message);
+    await loadRef(); loadQueue();
+  };
+  card.querySelector('[data-a="merge"]').onclick = async () => {
+    const dst = +f("merge").value;
+    if (!dst) return (f("err").textContent = "เลือกรุ่นที่จะรวมก่อน");
+    const { error } = await sb.rpc("admin_merge_model", { src: id, dst });
+    if (error) return (f("err").textContent = error.message);
+    loadQueue();
+  };
+}
+
+// ---------- Prices & Export ----------
+function priceQuery() {
+  let q = sb.from("v_prices").select("*").gte("price_date", $("dFrom").value).lte("price_date", $("dTo").value);
+  if ($("fAcc").value) q = q.eq("account", $("fAcc").value);
+  if ($("fCat").value) q = q.eq("category", $("fCat").value);
+  if ($("fBrand").value.trim()) q = q.ilike("brand", `%${$("fBrand").value.trim()}%`);
+  return q.order("price_date", { ascending: false }).order("site_code").order("model");
+}
+const COLS = [["price_date","วันที่"],["account","ห้าง"],["site_code","Site Code"],["site_name","สาขา"],["region","ภาค"],["as_code","AS Code"],["category","Category"],["brand","Brand"],["model","Model"],["segment","Segment"],["capacity_group","Capacity Group"],["capacity_val","Capacity"],["capacity_unit","หน่วย"],["price","Price"],["model_status","สถานะรุ่น"],["pc_id","PC"]];
+async function loadPrices() {
+  $("pInfo").textContent = "กำลังโหลด…";
+  const { data, error, count } = await priceQuery().range(0, 299);
+  if (error) return ($("pInfo").textContent = error.message);
+  $("pInfo").textContent = `แสดง ${data.length} แถวล่าสุด (Export จะได้ครบทุกแถว)`;
+  $("pTbl").innerHTML = `<tr>${COLS.map(c => `<th>${c[1]}</th>`).join("")}</tr>` + data.map(r => `<tr>${COLS.map(([k]) =>
+    k === "price" ? `<td class="num">${fmt(r[k])}</td>` : k === "model_status" ? `<td>${r[k] === "approved" ? '<span class="badge b-ok">Master</span>' : '<span class="badge b-warn">รอตรวจ</span>'}</td>` : `<td>${esc(r[k])}</td>`).join("")}</tr>`).join("");
+}
+$("btnLoad").onclick = loadPrices;
+$("btnCsv").onclick = async () => {
+  $("pInfo").textContent = "กำลังเตรียมไฟล์…";
+  const all = []; const size = 1000;
+  for (let from = 0; ; from += size) {
+    const { data, error } = await priceQuery().range(from, from + size - 1);
+    if (error) return ($("pInfo").textContent = error.message);
+    all.push(...data); if (data.length < size) break;
+  }
+  const q = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const csv = "﻿" + [COLS.map(c => c[1]).join(","), ...all.map(r => COLS.map(([k]) => q(r[k])).join(","))].join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `price_${$("dFrom").value}_${$("dTo").value}.csv`; a.click();
+  $("pInfo").textContent = `Export ${all.length} แถวแล้ว`;
+};
+
+// ---------- Master ----------
+async function loadMaster() {
+  let q = sb.from("models").select("*").eq("status", "approved").order("category").order("brand").order("model");
+  if ($("mCat").value) q = q.eq("category", $("mCat").value);
+  if ($("mSearch").value.trim()) q = q.or(`model.ilike.%${$("mSearch").value.trim()}%,brand.ilike.%${$("mSearch").value.trim()}%`);
+  const { data } = await q.limit(1000);
+  $("mTbl").innerHTML = `<tr><th>Category</th><th>Brand</th><th>Model</th><th>Segment</th><th>Capacity</th><th>Capacity Group</th><th>ที่มา</th></tr>` +
+    (data || []).map(m => `<tr><td>${esc(m.category)}</td><td>${esc(m.brand)}</td><td>${esc(m.model)}</td><td>${esc(m.segment)}</td><td>${esc(m.capacity_text ?? m.capacity_val)}</td><td>${esc(m.capacity_group)}</td><td>${m.source === "master" ? "Master file" : "อนุมัติจากแอป"}</td></tr>`).join("");
+}
+$("mSearch").oninput = () => { clearTimeout(window._t); window._t = setTimeout(loadMaster, 300); };
+$("mCat").onchange = loadMaster;
+
+sb.auth.getSession().then(({ data }) => { if (data.session) start(); });
+</script>
+</body>
+</html>

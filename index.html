@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Price Tag</title>
+<meta name="theme-color" content="#1428A0">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="config.js"></script>
+<style>
+  :root{--brand:#1428A0;--bg:#F3F5FA;--card:#fff;--ink:#1B1F2A;--mute:#6B7280;--line:#E3E7EF;
+        --ok:#0F8A4B;--okbg:#E6F6EE;--warn:#B26A00;--warnbg:#FFF6DB;--bad:#C0262D;--badbg:#FDECEC}
+  *{box-sizing:border-box} html,body{margin:0}
+  body{font-family:Sarabun,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:16px;padding-bottom:96px}
+  header{background:var(--brand);color:#fff;padding:14px 16px calc(14px);position:sticky;top:0;z-index:5}
+  header h1{font-size:18px;margin:0} header .sub{font-size:13px;opacity:.85}
+  main{padding:16px;max-width:640px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+  input,select{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  input.warn,select.warn{background:var(--warnbg);border-color:#F2C94C}
+  .btn{display:block;width:100%;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:700;cursor:pointer}
+  .btn.primary{background:var(--brand);color:#fff} .btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+  .btn:disabled{opacity:.45}
+  .row{display:flex;gap:10px} .row>*{flex:1}
+  .tabs{display:flex;gap:6px;margin-bottom:12px} .tabs button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:#fff;font:inherit}
+  .tabs button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .item{display:flex;gap:12px;align-items:flex-start}
+  .thumb{width:84px;height:84px;border-radius:10px;object-fit:cover;background:#ddd;flex:none}
+  .badge{display:inline-block;font-size:12px;font-weight:600;padding:3px 8px;border-radius:99px;margin:2px 4px 2px 0}
+  .b-ok{background:var(--okbg);color:var(--ok)} .b-warn{background:var(--warnbg);color:var(--warn)}
+  .b-bad{background:var(--badbg);color:var(--bad)} .b-mute{background:#EEF0F5;color:var(--mute)}
+  .msg{font-size:13px;margin-top:6px} .msg.bad{color:var(--bad)} .msg.warn{color:var(--warn)}
+  .muted{color:var(--mute);font-size:13px}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+  .bar .inner{max-width:640px;margin:0 auto;display:flex;gap:10px} .bar .inner>*{flex:1}
+  .hist td{padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid #cfd6ea;border-top-color:var(--brand);border-radius:50%;animation:s 1s linear infinite;vertical-align:-2px}
+  @keyframes s{to{transform:rotate(360deg)}}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<header><h1>📷 Price Tag</h1><div class="sub" id="hdrSub">บันทึกราคาจากป้ายสินค้า</div></header>
+<main>
+
+  <!-- 1) Login -->
+  <section id="vLogin" class="card hidden">
+    <h3 style="margin-top:0">เข้าสู่ระบบ</h3>
+    <label>รหัสพนักงาน</label>
+    <input id="pcId" inputmode="numeric" autocomplete="off" placeholder="เช่น 408536">
+    <div id="loginMsg" class="msg bad"></div>
+    <div style="height:12px"></div>
+    <button class="btn primary" id="btnLogin">ถัดไป</button>
+  </section>
+
+  <!-- 2) Confirm store -->
+  <section id="vStore" class="card hidden">
+    <h3 style="margin-top:0">ยืนยันร้านของคุณ</h3>
+    <div class="muted">รหัสพนักงาน <b id="cfPc"></b></div>
+    <label>ร้าน/สาขา</label>
+    <select id="storeSel"></select>
+    <div class="muted" style="margin-top:8px">ถ้าไม่ใช่ร้านของคุณ แปลว่ารหัสพนักงานอาจพิมพ์ผิด</div>
+    <div style="height:12px"></div>
+    <div class="row"><button class="btn ghost" id="btnBack">ใส่รหัสใหม่</button><button class="btn primary" id="btnConfirm">ใช่ ร้านนี้</button></div>
+  </section>
+
+  <!-- 3) Main -->
+  <section id="vMain" class="hidden">
+    <div class="tabs"><button id="tUp" class="on">อัพรูป</button><button id="tHist">ประวัติ</button></div>
+    <div id="pUp">
+      <div class="card">
+        <div class="muted">เลือกรูปจาก Gallery ได้หลายรูปพร้อมกัน · <b>1 รูป = 1 ป้ายราคา</b></div>
+        <div style="height:10px"></div>
+        <button class="btn primary" id="btnPick">＋ เลือกรูปป้ายราคา</button>
+        <input type="file" id="file" accept="image/*" multiple class="hidden">
+        <div class="muted" id="qInfo" style="margin-top:8px"></div>
+      </div>
+      <div id="list"></div>
+    </div>
+    <div id="pHist" class="hidden"><div class="card"><table class="hist" style="width:100%;border-collapse:collapse" id="histTbl"></table></div></div>
+    <div style="text-align:center;margin-top:16px"><a href="#" id="logout" class="muted">ออกจากระบบ</a></div>
+  </section>
+</main>
+
+<div class="bar hidden" id="bar"><div class="inner">
+  <button class="btn primary" id="btnSaveAll">บันทึกทั้งหมดที่พร้อม</button>
+</div></div>
+
+<script>
+const C = window.APP_CONFIG;
+const CATS = [["AC","แอร์ (AC)","BTU"],["REF","ตู้เย็น (REF)","L"],["WM","เครื่องซักผ้า (WM)","KG"]];
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+let session = null;   // {pc_id, store}
+let pending = null;   // login ที่ยังไม่ยืนยันร้าน
+const items = [];     // รูปที่เลือก
+let busy = false;
+
+function load() { try { return JSON.parse(localStorage.getItem("pt_session")); } catch { return null; } }
+function store(v) { try { v ? localStorage.setItem("pt_session", JSON.stringify(v)) : localStorage.removeItem("pt_session"); } catch {} }
+
+async function api(action, body) {
+  const res = await fetch(`${C.SUPABASE_URL}/functions/v1/pc-api`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: C.SUPABASE_ANON_KEY, Authorization: `Bearer ${C.SUPABASE_ANON_KEY}` },
+    body: JSON.stringify({ action, ...body }),
+  });
+  let data = {}; try { data = await res.json(); } catch {}
+  if (!res.ok) { const e = new Error(data.error || `HTTP ${res.status}`); e.status = res.status; e.data = data; throw e; }
+  return data;
+}
+
+function show(v) {
+  for (const id of ["vLogin","vStore","vMain"]) $(id).classList.toggle("hidden", id !== v);
+  $("bar").classList.toggle("hidden", v !== "vMain" || !items.some(isReady));
+  $("hdrSub").textContent = session ? `${session.store.site_name} · ${session.pc_id}` : "บันทึกราคาจากป้ายสินค้า";
+}
+
+// ---------- Login ----------
+$("btnLogin").onclick = async () => {
+  const id = $("pcId").value.trim();
+  $("loginMsg").textContent = "";
+  if (!id) return ($("loginMsg").textContent = "กรุณาใส่รหัสพนักงาน");
+  $("btnLogin").disabled = true;
+  try {
+    pending = await api("login", { pc_id: id });
+    $("cfPc").textContent = pending.pc_id;
+    $("storeSel").innerHTML = `<option value="">— เลือกร้าน —</option><option value="${esc(pending.store.site_code)}">${esc(pending.store.account)} · ${esc(pending.store.site_name)}</option>`;
+    show("vStore");
+  } catch (e) { $("loginMsg").textContent = e.message; }
+  $("btnLogin").disabled = false;
+};
+$("pcId").onkeydown = (e) => { if (e.key === "Enter") $("btnLogin").click(); };
+$("btnBack").onclick = () => { pending = null; show("vLogin"); };
+$("btnConfirm").onclick = () => {
+  if ($("storeSel").value !== pending.store.site_code) return alertBox("กรุณาเลือกร้าน");
+  session = pending; store(session); show("vMain");
+};
+$("logout").onclick = (e) => { e.preventDefault(); session = null; store(null); items.length = 0; render(); $("pcId").value = ""; show("vLogin"); };
+function alertBox(t) { $("storeSel").classList.add("warn"); setTimeout(() => $("storeSel").classList.remove("warn"), 1500); }
+
+// ---------- Tabs ----------
+$("tUp").onclick = () => { $("tUp").classList.add("on"); $("tHist").classList.remove("on"); $("pUp").classList.remove("hidden"); $("pHist").classList.add("hidden"); };
+$("tHist").onclick = async () => {
+  $("tHist").classList.add("on"); $("tUp").classList.remove("on"); $("pHist").classList.remove("hidden"); $("pUp").classList.add("hidden");
+  $("histTbl").innerHTML = `<tr><td><span class="spin"></span> กำลังโหลด…</td></tr>`;
+  try {
+    const { items: h } = await api("history", { pc_id: session.pc_id });
+    $("histTbl").innerHTML = h.length ? h.map(r => `<tr><td>${esc(r.price_date)}</td><td><b>${esc(r.models?.model)}</b><br><span class="muted">${esc(r.models?.brand)} · ${esc(r.models?.category)}</span>${r.models?.status === "pending" ? ' <span class="badge b-warn">รอตรวจ</span>' : ""}</td><td style="text-align:right">฿${Number(r.price).toLocaleString()}</td></tr>`).join("")
+      : `<tr><td class="muted">ยังไม่มีข้อมูล</td></tr>`;
+  } catch (e) { $("histTbl").innerHTML = `<tr><td class="msg bad">${esc(e.message)}</td></tr>`; }
+};
+
+// ---------- Pick & process ----------
+$("btnPick").onclick = () => $("file").click();
+$("file").onchange = async (e) => {
+  for (const f of e.target.files) items.unshift({ key: Math.random().toString(36).slice(2), file: f, status: "wait", thumb: URL.createObjectURL(f) });
+  e.target.value = "";
+  render(); processQueue();
+};
+
+async function sha256(file) {
+  const buf = await file.arrayBuffer();
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function compress(file, max = 1600) {
+  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => createImageBitmap(file));
+  const s = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s);
+  cv.getContext("2d").drawImage(bmp, 0, 0, cv.width, cv.height);
+  const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", 0.82));
+  const b64 = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(blob); });
+  return b64;
+}
+
+async function processQueue() {
+  if (busy) return; busy = true;
+  let it;
+  while ((it = items.find(x => x.status === "wait"))) {
+    it.status = "reading"; update(it);
+    try {
+      it.hash = it.hash || await sha256(it.file);
+      if (items.some(x => x !== it && x.hash === it.hash)) { it.status = "dup"; it.err = "เลือกรูปนี้ซ้ำในรอบนี้แล้ว"; update(it); continue; }
+      const b64 = await compress(it.file);
+      let res, tries = 0;
+      while (true) {
+        try { res = await api("read", { pc_id: session.pc_id, site_code: session.store.site_code, file_hash: it.hash, image_b64: b64, mime: "image/jpeg" }); break; }
+        catch (e) {
+          if (e.status === 429 && tries < 5) { tries++; it.note = `AI คิวเต็ม รอสักครู่… (${tries})`; update(it); await sleep(8000 * tries); continue; }
+          throw e;
+        }
+      }
+      it.note = ""; it.upload_id = res.upload_id; it.r = res.result;
+      it.status = (res.result.tag_count !== 1) ? "blocked" : "ready";
+    } catch (e) {
+      if (e.status === 409) { it.status = "dup"; it.err = "รูปนี้เคยอัพและบันทึกแล้ว"; }
+      else { it.status = "error"; it.err = e.message; }
+    }
+    update(it);
+  }
+  busy = false;
+}
+
+// ---------- Render ----------
+const isReady = (x) => x.status === "ready";
+function fieldCls(it, f) { return it.r.uncertain.includes(f) ? "warn" : ""; }
+
+function summary() {
+  const n = (s) => items.filter(x => x.status === s).length;
+  $("qInfo").textContent = items.length ? `ทั้งหมด ${items.length} รูป · บันทึกแล้ว ${n("saved")} · รอตรวจ ${n("ready")}` : "";
+  $("bar").classList.toggle("hidden", !items.some(isReady) || $("vMain").classList.contains("hidden"));
+}
+// วาดใหม่ทั้งหมด (ตอนเพิ่ม/ลบรูป)
+function render() {
+  $("list").innerHTML = items.map(it => `<div id="c-${it.key}">${cardHtml(it)}</div>`).join("");
+  for (const it of items) bindCard(it);
+  summary();
+}
+// วาดใหม่เฉพาะการ์ดเดียว — ไม่รบกวนการ์ดที่ PC กำลังพิมพ์อยู่
+function update(it) {
+  const el = $("c-" + it.key);
+  if (!el) return render();
+  el.innerHTML = cardHtml(it); bindCard(it); summary();
+}
+
+function cardHtml(it) {
+  const head = `<img class="thumb" src="${it.thumb}">`;
+  if (it.status === "wait" || it.status === "reading")
+    return `<div class="card item">${head}<div><span class="spin"></span> ${it.status === "wait" ? "รอคิว" : "AI กำลังอ่านป้าย…"}<div class="muted">${esc(it.note || "")}</div></div></div>`;
+  if (it.status === "dup" || it.status === "error")
+    return `<div class="card item">${head}<div><span class="badge ${it.status === "dup" ? "b-mute" : "b-bad"}">${it.status === "dup" ? "ซ้ำ" : "ผิดพลาด"}</span><div class="msg ${it.status === "dup" ? "" : "bad"}">${esc(it.err)}</div>${it.status === "error" ? `<button class="btn ghost" style="margin-top:8px;padding:8px" data-retry="${it.key}">ลองใหม่</button>` : ""}</div></div>`;
+  const r = it.r;
+  if (it.status === "saved")
+    return `<div class="card item">${head}<div><span class="badge b-ok">✓ บันทึกแล้ว</span>${it.savedPending ? '<span class="badge b-warn">รุ่นใหม่ รอ Admin</span>' : ""}<div><b>${esc(r.model)}</b> · ฿${Number(r.price).toLocaleString()}</div><div class="muted">${esc(r.brand)} · ${esc(r.category)}</div></div></div>`;
+
+  const status = r.in_master
+    ? `<span class="badge b-ok">✓ อยู่ใน Master</span><span class="badge b-mute">${esc(r.segment || "-")} · ${esc(r.capacity_group || "-")}</span>`
+    : r.pending ? `<span class="badge b-warn">รุ่นใหม่ (มีคนส่งแล้ว รอ Admin)</span>`
+    : `<span class="badge b-warn">รุ่นใหม่ — Admin จะตรวจ Segment</span>`;
+  const warns = (r.warnings || []).map(w => `<div class="msg ${it.status === "blocked" ? "bad" : "warn"}">⚠ ${esc(w)}</div>`).join("");
+  const lock = r.in_master || r.pending ? "disabled" : "";
+  const unit = (CATS.find(c => c[0] === r.category) || [])[2] || "";
+  return `<div class="card">
+    <div class="item">${head}<div style="flex:1">${status}${warns}
+      ${it.status === "blocked" ? `<button class="btn ghost" style="margin-top:8px;padding:8px" data-force="${it.key}">ป้ายเดียวจริง ใช้ต่อ</button>` : ""}</div></div>
+    ${it.status === "blocked" ? "" : `
+    <div class="row"><div><label>ยี่ห้อ</label><input data-f="brand" data-k="${it.key}" class="${fieldCls(it,"brand")}" value="${esc(r.brand)}" ${lock}></div>
+      <div><label>หมวด</label><select data-f="category" data-k="${it.key}" class="${fieldCls(it,"category")}" ${lock}>
+        <option value="">—</option>${CATS.map(c => `<option value="${c[0]}" ${c[0] === r.category ? "selected" : ""}>${c[1]}</option>`).join("")}</select></div></div>
+    <label>รุ่น (Model)</label><input data-f="model" data-k="${it.key}" class="${fieldCls(it,"model")}" value="${esc(r.model)}" autocapitalize="characters">
+    <div class="row"><div><label>ความจุ ${unit ? "(" + unit + ")" : ""}</label><input data-f="capacity_val" data-k="${it.key}" inputmode="decimal" class="${fieldCls(it,"capacity_value")}" value="${esc(r.capacity_val ?? "")}" ${lock}></div>
+      <div><label>ราคา (บาท)</label><input data-f="price" data-k="${it.key}" inputmode="decimal" class="${fieldCls(it,"price")}" value="${esc(r.price ?? "")}"></div></div>
+    <div class="msg bad" id="err-${it.key}">${esc(it.err || "")}</div>
+    <div style="height:10px"></div>
+    <div class="row"><button class="btn ghost" data-drop="${it.key}">ลบ</button><button class="btn primary" data-save="${it.key}">บันทึก</button></div>`}
+  </div>`;
+}
+
+function bindCard(it) {
+  document.querySelectorAll(`[data-k="${it.key}"]`).forEach(el => {
+    el.oninput = el.onchange = () => {
+      const f = el.dataset.f; it.r[f] = el.value;
+      el.classList.remove("warn");
+      if (f === "model") { // เปลี่ยนรุ่น = ไม่ผูกกับรุ่นใน Master เดิมแล้ว
+        if (it.r.in_master || it.r.pending) { it.r.in_master = false; it.r.pending = false; it.r.model_id = null; it.r.segment = null; update(it); document.querySelector(`[data-f="model"][data-k="${it.key}"]`)?.focus(); }
+      }
+    };
+  });
+  const q = (a) => document.querySelector(`[data-${a}="${it.key}"]`);
+  const th = document.querySelector(`#c-${it.key} .thumb`); th && (th.onclick = () => window.open(it.thumb, "_blank"));
+  q("save") && (q("save").onclick = async () => { q("save").disabled = true; await saveOne(it); update(it); });
+  q("drop") && (q("drop").onclick = () => { items.splice(items.indexOf(it), 1); render(); });
+  q("retry") && (q("retry").onclick = () => { it.status = "wait"; it.err = ""; update(it); processQueue(); });
+  q("force") && (q("force").onclick = () => { it.status = "ready"; it.r.warnings = it.r.warnings.filter(w => !w.includes("หลายป้าย")); update(it); });
+}
+
+async function saveOne(it) {
+  const r = it.r; it.err = "";
+  if (!r.category) return (it.err = "กรุณาเลือกหมวด");
+  if (!String(r.model || "").trim()) return (it.err = "กรุณาใส่รุ่น");
+  if (!(Number(String(r.price).replace(/,/g, "")) > 0)) return (it.err = "กรุณาใส่ราคา");
+  try {
+    const res = await api("save", { pc_id: session.pc_id, site_code: session.store.site_code, upload_id: it.upload_id,
+      brand: r.brand, category: r.category, model: r.model, segment: r.segment, capacity_val: r.capacity_val, price: String(r.price).replace(/,/g, "") });
+    it.status = "saved"; it.savedPending = res.pending; r.model = res.model;
+  } catch (e) { it.err = e.message; }
+}
+
+$("btnSaveAll").onclick = async () => {
+  $("btnSaveAll").disabled = true;
+  for (const it of items.filter(isReady)) { await saveOne(it); update(it); }
+  $("btnSaveAll").disabled = false;
+};
+
+// ---------- Start ----------
+session = load();
+show(session ? "vMain" : "vLogin");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
